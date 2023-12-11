@@ -43,8 +43,7 @@ class TreeOfThought:
         """
         initial_thoughts = self.generate_thoughts(self.problem_input)
         evaluated_thoughts = self.evaluate_thoughts(initial_thoughts)
-        solution_path = self.search_algorithm(evaluated_thoughts)
-        return solution_path
+        return self.search_algorithm(evaluated_thoughts)
 
 # Example usage
 problem_input = "Define your problem input here"

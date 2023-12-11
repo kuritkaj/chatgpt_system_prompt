@@ -34,7 +34,7 @@ class TreeofThoughts:
             json.dump(self.tree, json_file, indent=4)
 
     def logNewState(self, state, evaluation):
-        if not (type(state) == str):
+        if type(state) != str:
             state = " | ".join(state)
         if state in self.tree["nodes"]:
             self.tree["nodes"][state]["thoughts"].append(evaluation)
@@ -45,9 +45,7 @@ class TreeofThoughts:
         self, evaluated_thoughts, percentile
     ):
         values = np.array(list(evaluated_thoughts.values()))
-        if values.size == 0:
-            return 0
-        return max(np.percentile(values, percentile), 0.1)
+        return 0 if values.size == 0 else max(np.percentile(values, percentile), 0.1)
 
     def adjust_pruning_threshold_moving_average(
         self, evaluated_thoughts, window_size
@@ -78,7 +76,7 @@ class TreeofThoughtsBFS(TreeofThoughts):
 
         try:
             with concurrent.futures.ThreadPoolExecutor() as executor:
-                for step in range(1, max_steps + 1):
+                for _ in range(1, max_steps + 1):
                     selected_states = []
                     for state in current_states:
                         thoughts = self.model.generate_thoughts(
@@ -127,36 +125,23 @@ class TreeofThoughtsBFS(TreeofThoughts):
                                 self.logNewState(state, value)
                                 logger.debug(f"State Values: {state_values}")
 
-            # if state_values:
-            #     highest_rated_solution = max(state_values.items(), key=lambda x: x[1])
-            #     print(f"highest rated solution: {highest_rated_solution}")
-            #     highest_rated_state = highest_rated_solution[0]  # Use a different name to avoid confusion
-            #     print(f'highest rated state: {highest_rated_state}')
-            #     try:
-            #         solution = self.model.generate_solution(initial_prompt, highest_rated_state)
-            #     except Exception as e:
-            #         logger.error(f"Error in generating solution: {e}")
-            #         solution = None  # Set a fallback value for solution
-
-            #     return solution if solution is not None else highest_rated_state  # Return highest rated state if solution is None
-            if state_values:
-                highest_rated_solution = max(
-                    state_values.items(), key=lambda x: x[1]
-                )
-                highest_rated_state = highest_rated_solution[0]
-                solution = self.model.generate_solution(
-                    initial_prompt, highest_rated_state
-                )
-                print(
-                    "Highest_rated solution:"
-                    f" {highest_rated_solution} highest_rated_solution:"
-                    f" {highest_rated_solution} Solution: {solution}"
-                )
-
-                return solution if solution else highest_rated_state
-
-            else:
+            if not state_values:
                 return None
+
+            highest_rated_solution = max(
+                state_values.items(), key=lambda x: x[1]
+            )
+            highest_rated_state = highest_rated_solution[0]
+            solution = self.model.generate_solution(
+                initial_prompt, highest_rated_state
+            )
+            print(
+                "Highest_rated solution:"
+                f" {highest_rated_solution} highest_rated_solution:"
+                f" {highest_rated_solution} Solution: {solution}"
+            )
+
+            return solution if solution else highest_rated_state
 
         except Exception as e:
             logger.error(f"Error in tot_bfs: {e}")
@@ -381,23 +366,24 @@ class MonteCarloTreeofThoughts(TreeofThoughts):
         }
 
     def optimize_params(self, num_thoughts, max_steps, max_states):
-        if self.objective == "speed":
+        if (
+            self.objective != "speed"
+            and self.objective != "reliability"
+            and self.objective == "balanace"
+            and self.solution_found
+            or self.objective == "speed"
+        ):
             num_thoughts = max(1, num_thoughts - 1)
             max_steps = max(1, max_steps - 1)
             max_states = max(1, max_states - 1)
-        elif self.objective == "reliability":
+        elif (
+            self.objective != "reliability"
+            and self.objective == "balanace"
+            or self.objective == "reliability"
+        ):
             num_thoughts += 1
             max_steps += 1
             max_states += 1
-        elif self.objective == "balanace":
-            if self.solution_found:
-                num_thoughts = max(1, num_thoughts - 1)
-                max_steps = max(1, max_steps - 1)
-                max_states = max(1, max_states - 1)
-            else:
-                num_thoughts += 1
-                max_steps += 1
-                max_states += 1
 
         return num_thoughts, max_steps, max_states
 
@@ -437,7 +423,7 @@ class MonteCarloTreeofThoughts(TreeofThoughts):
         best_state = None
         best_value = float("-inf")
 
-        for step in range(1, max_steps + 1):
+        for _ in range(1, max_steps + 1):
             selected_states = []
 
             for state in current_states:
@@ -471,10 +457,7 @@ class MonteCarloTreeofThoughts(TreeofThoughts):
                     if flattened_state not in visit_counts:
                         visit_counts[flattened_state] = 0
 
-                    if (
-                        visit_counts[state] > visit_counts[flattened_state]
-                        and visit_counts[flattened_state] > 0
-                    ):
+                    if visit_counts[state] > visit_counts[flattened_state] > 0:
                         ucb1_value = value + np.sqrt(
                             2
                             * np.log(visit_counts[state])
